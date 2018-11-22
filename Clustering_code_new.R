@@ -41,12 +41,11 @@
 # X[ 6:10, 11:20 ] <- X[ 6:10, 11:20 ] + 2
 # X[ c( 1, 3, 4, 7, 9 ), 21:30 ] <- X[ c( 1, 3, 4, 7, 9 ), 21:30 ] - 2
 # colnames( X ) <- c( paste( "PC(", 1:10, ":0)", sep="" ), paste( "TG(", 1:10, ":0)", sep="" ), paste( "Unknown (", 1:30, ")", sep="" ) )
-X<-(as.matrix(CIMT_for_clustering_discovery))
+X<-(as.matrix(Medim_new[,19:158]))
 # covariate <- factor( x=rep( x=c( "Control", "Case" ), each=ceiling( nrow( X ) / 2 ), length.out=nrow( X ) ), levels=c( "Control", "Case" ) )
-#covariate<-factor(Medim_new$Country,levels = as.character(unique(Medim_new$Country)))
-X.non.scaled <- t(X)
+covariate<-factor(Medim_new$Country,levels = as.character(unique(Medim_new$Country)))
+X.non.scaled <- X
 X <- scale( x = X.non.scaled )
-#rownames(X)<-Medim_new$Compound.Name
 # END OF REPLACE OR COMMENT OUT!
 
 
@@ -55,11 +54,11 @@ opts.clustering <- list()
 ## File paths for saving results.
 
 # File path for saving the optimization result (optional)
-opts.clustering$optimization$file.path.result <- file.path( "Z:", "AQAI - Ashfaq Ali", "CIMT_trial","Clustering","result_clustering_optimization_clust.RData" )
+opts.clustering$optimization$file.path.result <- file.path( "Z:", "AQAI - Ashfaq Ali", "MEDIM","Medim_new_data","result_clustering_optimization_clust.RData" )
 
 
 # File path for saving the optimal model (optional)
-opts.clustering$fit$file.path.result <- file.path( "Z:", "AQAI - Ashfaq Ali", "CIMT_trial","Clustering", "result_clustering_fit.RData" )
+opts.clustering$fit$file.path.result <- file.path( "Z:", "AQAI - Ashfaq Ali", "MEDIM","Medim_new_data", "result_clustering_fit.RData" )
 
 
 
@@ -160,7 +159,7 @@ save( result.clustering.optimization, file=opts.clustering$optimization$file.pat
 
 # Load an earlier result of the optimization (commented out; not run).
 # If used, the given file needs to exist.
- load( file=opts.clustering$optimization$file.path.result )
+# load( file=opts.clustering$optimization$file.path.result )
 
 
 ## Selection of the optimal model
@@ -198,7 +197,7 @@ result.clustering.fit <- vb_dp_gmm_fit(
 
 # Load an earlier result of the selection of the optimal model (commented out; not run).
 # If used, the given file needs to exist.
-load( file=opts.clustering$fit$file.path.result )
+# load( file=opts.clustering$fit$file.path.result )
 
 
 
@@ -262,8 +261,6 @@ X.cluster.mean <- array( dim=c( nrow( X ), max( cluster.assignments ) ) )
 colnames( X.cluster.mean ) <- paste( "Cluster", 1:ncol( X.cluster.mean ) )
 rownames( X.cluster.mean ) <- rownames( X )
 
-X.cluster.sd <- X.cluster.mean
-
 # Compute the sample-specific mean for each cluster.
 for ( k in 1:max( cluster.assignments ) ) { # Go through the clusters.
     
@@ -274,7 +271,6 @@ for ( k in 1:max( cluster.assignments ) ) { # Go through the clusters.
         
         # Compute the sample-specific mean over the items assigned to cluster 'k'.
         X.cluster.mean[ , k ] <- rowMeans( X[ , items.k, drop=FALSE ] )
-        X.cluster.sd[ , k ] <- apply( X=X[ , items.k, drop=FALSE ], MAR=1, FUN=sd )
         
     }
 }

@@ -1,0 +1,256 @@
+---
+title: "Medim_classification"
+output: html_document
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(glmnet)
+library(Hmisc)
+library(corrplot)
+library(limma)
+library(dplyr)
+library(tidyr)
+library(gtools)
+library(caret)
+library(pROC)
+library(ggplot2)
+load("Z:/AQAI - Ashfaq Ali/MEDIM/Medim_new_data/Clustering_work/Clustering_workspace.RData")
+
+```
+
+Prepare the data for fitting the model
+
+```{r}
+MEDIM_clinical_data_fixed <- read.csv("Z:/AQAI - Ashfaq Ali/MEDIM/Medim_new_data/MEDIM_clinical_data_fixed.csv")
+rownames(MEDIM_clinical_data_fixed)<-MEDIM_clinical_data_fixed$MEDIM_IDnr
+Medim_clinical_metabo<- data.frame(MEDIM_clinical_data_fixed[as.character(Medim_new$MEDIM_IDnr1),],Medim_new[,-c(1:18)])
+
+All_data<-subset(Medim_clinical_metabo,select = c("Country","Sex","AGE","DM_tot","Lipidsank","fglc" ,"BMI","ISI","DI", "HOMA_IR","HOMA_beta","kolesterol","TG", "HDL","LDL","kreatinin","roker","depression_tot","HbA1c_neww","CDKN2A_2B","HHEX_IDE","HNF1A","SLC30A8","IGF2BP2_1470579", "GCK", "PPARG", "IGF2BP2_4402960" ,"KCNJ11", "CDKAL1_7754840","CDKAL1_7756992","TCF7L2","FTO","sum_tot_riskallel","sum_four_riskallel", paste(names(Medim_clinical_metabo)[192:length(names(Medim_clinical_metabo))])))
+```
+
+Test the associations with Country in general
+
+```{r}
+All_data<-subset(All_data,!(is.na(Country)))
+
+#Country 1= Sweden, 2= Iraq, Sex 1= Female, 2=Male
+
+All_data$Country<-as.factor(ifelse(All_data$Country==1,"Sweden","Iraq"))
+predictros<-names(All_data)[names(All_data) !="Country"]
+outcome<-"Country"
+inTrainingSet<-createDataPartition(All_data$Country, p= .75, list=FALSE)
+Country_train<-All_data[inTrainingSet,]
+Country_test<- All_data[-inTrainingSet,]
+#x <- as.matrix(Country_train[,predictros])
+#y<- (Country_train$Country)
+
+```
+
+Plot different variables against the outcome variable
+
+```{r, echo=FALSE}
+qplot(QuinA,log(HOMA_IR), colour= Country, data = Country_train)
+
+```
+
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 5, returnResamp = "none",
+                     classProbs = TRUE, summaryFunction = twoClassSummary)
+
+objModel<- train(x = Country_train[,predictros], y = Country_train[,outcome],
+                method = "gbm",
+                metric = "ROC",
+                trControl = ctrl,
+                verbose = FALSE,
+                preProcess = c("center","scale")
+              )
+
+```
+###
+
+```{r, echo = FALSE}
+summary(objModel)
+```
+
+plot(varImp(objModel,scale=F))
+
+```{r}
+#################################################
+# evalutate model
+#################################################
+# get predictions on your testing data
+
+# class prediction
+predictions <- predict(object=objModel, Country_test[,predictros], type='raw')
+head(predictions)
+postResample(pred=predictions, obs=as.factor(Country_test[,outcome]))
+
+# probabilities 
+predictions <- predict(object=objModel, Country_test[,predictros], type='prob')
+head(predictions)
+postResample(pred=predictions[[1]], obs=ifelse(Country_test[,outcome]=='Iraq',1,0))
+
+auc <- roc(ifelse(Country_test[,outcome]=="Iraq",1,0), predictions[[2]])
+print(auc$auc)
+
+```
+
+# TCF7L2,sum_four_riskallel, ISI, HOMA_IR
+Test the associations with TCF7L2
+
+```{r}
+All_data<-subset(All_data,!(is.na(TCF7L2)))
+
+#Country 1= Sweden, 2= Iraq, Sex 1= Female, 2=Male
+
+All_data$Country<-as.factor(ifelse(All_data$Country==1,"Sweden","Iraq"))
+predictros<-names(All_data)[names(All_data) !="TCF7L2"]
+outcome<-"TCF7L2"
+inTrainingSet<-createDataPartition(All_data$TCF7L2, p= .75, list=FALSE)
+Country_train<-All_data[inTrainingSet,]
+Country_test<- All_data[-inTrainingSet,]
+#x <- as.matrix(Country_train[,predictros])
+#y<- (Country_train$Country)
+
+```
+
+Plot different variables against the outcome variable
+
+```{r, echo=FALSE}
+qplot((HOMA_IR)log(QuinA), colour= Country, data = Country_train)
+
+```
+
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 3, returnResamp = "none")
+
+objModel<- train( Country_train[,predictros],  Country_train[ ,outcome], method = "glmnet",
+                trControl = ctrl,
+                metric = "RMSE"
+              )
+
+predictions <- predict(object = objModel, Country_test[,predictros])
+auc<-roc(Country_test[,outcome], predictions)
+
+print(auc$auc)
+summary(objModel)
+plot(varImp(objModel, scale=F))
+
+vimp<-varImp(objModel, scale = F)
+vimp
+```
+###
+
+```{r, echo = FALSE}
+summary(objModel)
+```
+
+plot(varImp(objModel,scale=F))
+
+```{r}
+#################################################
+# evalutate model
+#################################################
+# get predictions on your testing data
+
+# class prediction
+predictions <- predict(object=objModel, Country_test[,predictros], type='raw')
+head(predictions)
+postResample(pred=predictions, obs=as.factor(Country_test[,outcome]))
+
+# probabilities 
+predictions <- predict(object=objModel, Country_test[,predictros], type='prob')
+head(predictions)
+postResample(pred=predictions[[2]], obs=ifelse(Country_test[,outcome]=='Iraq',1,0))
+
+auc <- roc(ifelse(Country_test[,outcome]=="Iraq",1,0), predictions[[2]])
+print(auc$auc)
+
+```
+
+
+```{r}
+#################################################
+# glmnet model
+#################################################
+# Find out what kind of model glmnet supports
+getModelInfo()$glmnet$type
+
+# Prepare the data
+set.seed(1)
+All_data_1<-Medim_new[Medim_new$Country==1,]
+All_data_1<-subset(All_data_1, select=-c(MEDIM_IDnr,Batch,Sample,Compound.Name, MEDIM_IDnr1, Country))
+All_data_1<-subset(All_data_1,!(is.na(ISI)))
+#All_data_1$Country<-as.numeric(All_data_1$Country)-1
+All_data_1<-subset(All_data_1,!(is.na(sum_four_riskallel)))
+#All_data_2$Country<-as.numeric(All_data_2$Country)
+#All_data$Country<-as.factor(ifelse(All_data$Country==1,"Sweden","Iraq"))
+predictros<-names(All_data_1)[names(All_data_1) !="ISI"]
+outcome<-"ISI"
+inTrainingSet<-createDataPartition(All_data_1$ISI, p= .75, list=FALSE)
+Country_train<-All_data_1[inTrainingSet,]
+Country_test<- All_data_1[-inTrainingSet,]
+
+ctrl <- trainControl(method = "cv", number = 3, returnResamp = "none")
+
+objModel<- train( Country_train[,predictros],  Country_train[ ,outcome], method = "glmnet",
+                trControl = ctrl,
+                metric = "RMSE"
+              )
+
+predictions <- predict(object = objModel, Country_test[,predictros])
+auc<-roc(Country_test[,outcome], predictions)
+
+print(auc$auc)
+summary(objModel)
+plot(varImp(objModel, scale=F))
+
+vimp<-varImp(objModel, scale = F)
+vimp
+
+
+# Prepare the data
+set.seed(1)
+All_data_2<-Medim_new[Medim_new$Country==2,]
+All_data_2<-subset(All_data_2, select=-c(MEDIM_IDnr,Batch,Sample,Compound.Name, MEDIM_IDnr1, Country))
+All_data_2<-subset(All_data_2,!(is.na(ISI)))
+#All_data_2$Country<-as.numeric(All_data_2$Country)-1
+All_data_2<-subset(All_data_2,!(is.na(sum_four_riskallel)))
+#All_data_2$Country<-as.numeric(All_data_2$Country)
+#All_data$Country<-as.factor(ifelse(All_data$Country==1,"Sweden","Iraq"))
+predictros<-names(All_data_2)[names(All_data_2) !="ISI"]
+outcome<-"ISI"
+inTrainingSet<-createDataPartition(All_data_2$ISI, p= .75, list=FALSE)
+Country_train<-All_data_2[inTrainingSet,]
+Country_test<- All_data_2[-inTrainingSet,]
+
+ctrl <- trainControl(method = "cv", number = 3, returnResamp = "none")
+
+objModel<- train( Country_train[,predictros],  Country_train[ ,outcome], method = "glmnet",
+                trControl = ctrl,
+                metric = "RMSE"
+              )
+
+predictions <- predict(object = objModel, Country_test[,predictros])
+auc<-roc(Country_test[,outcome], predictions)
+
+print(auc$auc)
+summary(objModel)
+plot(varImp(objModel, scale=F))
+
+vimp_0<-varImp(objModel, scale = F)
+vimp_0
+```
+
+
+
+```{r}
+confusionMatrix(predictions,Country_test$Country)
+
+```

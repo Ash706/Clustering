@@ -1,0 +1,223 @@
+---
+title: "Patient classification and analyses of patient clusters"
+author: "Ashfaq Ali"
+output:
+  word_document: default
+  html_notebook: default
+  pdf_document:
+    fig_caption: yes
+  html_document: default
+---
+
+```{r, include=FALSE}
+library(Hmisc)
+library(sas7bdat)
+require( pca3d )
+library(corrplot)
+library(cluster)
+library(NbClust)
+library(fpc)
+library(ggbiplot)
+library(gplots)
+library(heatmaply)
+library(d3heatmap)
+library(ComplexHeatmap)
+library(circlize)
+library(impute)
+library(dplyr)
+library(plotly)
+```
+
+# Clustering based on baseline complete data
+
+In the forst phase of analyses, we performed k means clustering on data tha had complete observations for the follwoing variables. 
+
+```{r, echo= FALSE}
+#Load the data
+data.for.pca<-read.sas7bdat("C:/Users/AALI0054/Documents/Data/PCA/PCA_report/Followup_clust/pcabf.sas7bdat")
+data.for.pca_met<-read.sas7bdat("C:/Users/AALI0054/Documents/Data/PCA/pcamed.sas7bdat")
+bl.data.for.pca_full<- data.for.pca[data.for.pca$forl=="1"  & data.for.pca$type== "base" , ]
+bl.data.for.pca_full$sex<-as.numeric(bl.data.for.pca_full$sex)
+rownames(bl.data.for.pca_full)<-bl.data.for.pca_full$id
+
+```
+
+The original number of observations in the baseline data were as following. 
+
+```{r, echo=FALSE}
+dim(bl.data.for.pca_full)
+```
+
+The observations with comltete data on all variabels included was as following.
+
+```{r, echo=FALSE}
+bl.data.for.pca<-bl.data.for.pca_full[, names(bl.data.for.pca_full) %in% c( "id","agedeb","diabetesduration","HbA1c",  "bBMI","GAD" ,"homa_b" , "homa_ir", "agein")]
+
+
+```
+
+## Variables included in the clustering
+```{r, echo=FALSE}
+a<-c("diabetesduration","HbA1c",  "bBMI","GAD" ,"homa_b" , "homa_ir", "agedeb")
+a
+```
+
+
+In order to identify the number of clusters that explain most of the variance in the data, an estimated within the group sums of squares was used to obtain the number of clusters. 
+
+```{r, echo=FALSE, fig.cap="within groups sums of squares vs. the number of clusters extracted. The sharp decreases from 1 to 4 clusters (with little decrease after) suggest a 5-cluster solution.", fig.height=4, message=FALSE, fig1,fig.width=6}
+
+
+bl.data.for.pca_comp<-subset(bl.data.for.pca,select = a)
+bl.data.for.pca_comp<-na.omit(bl.data.for.pca_comp)
+dim(bl.data.for.pca_comp)
+
+bl.data.for.pca_comp<-scale(bl.data.for.pca_comp, center = TRUE, scale=TRUE)
+set.seed(123)
+wss <- (nrow(bl.data.for.pca_comp)-1)*sum(apply(bl.data.for.pca_comp,2,var))
+for (i in 1:15) wss[i] <- sum(kmeans(bl.data.for.pca_comp, 
+                                     centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+```
+
+
+We observed littel drop in within the group sums of squares after 5 clusters suggesting that the data may have a 5 cluster solution.
+
+```{r}
+nc <- NbClust(bl.data.for.pca_comp, min.nc=2, max.nc=15, method="kmeans")
+ table(nc$Best.n[1,])
+ 
+barplot(table(nc$Best.n[1,]),
+          xlab="Numer of Clusters", ylab="Number of Criteria",
+          main="Number of Clusters Chosen by 26 Criteria")
+```
+
+
+```{r,fig2, fig.height= 10, fig.width=8,echo=FALSE,message=FALSE}
+fit <- kmeans(bl.data.for.pca_comp, 6)
+means_k<-(aggregate(bl.data.for.pca_comp,by=list(fit$cluster),FUN=mean))
+bl.data.for.pca_comp<- data.frame(bl.data.for.pca_comp, fit$cluster)
+bl.data.for.pca_comp<- data.frame(bl.data.for.pca_comp, fit$cluster)
+pc1<-prcomp(bl.data.for.pca_comp[,1:6], center = TRUE, scale = TRUE)
+fit.cluster<-as.character(bl.data.for.pca_comp$fit.cluster)
+#bmicat<-as.character(bl.data.for.pca$bmicat)
+g <- ggbiplot(pc1, obs.scale = 1, var.scale = 1, 
+              groups = fit.cluster, ellipse = TRUE, 
+              circle = TRUE, choices = c(1,2),alpha = 0.4)
+g <- g + scale_color_discrete(name = fit.cluster)
+g <- g + theme(legend.direction = 'horizontal', 
+               legend.position = 'top')
+print(g)
+```
+
+## Distribution of number of patients in each cluster
+
+```{r, echo =FALSE, fig3,fig.width=6,fig.height=4,echo=FALSE,message=FALSE,include=TRUE}
+Number_in_clust<-data.frame(tabulate(bl.data.for.pca_comp$fit.cluster), c("1", "2", "3", "4","5", "6"))
+colnames(Number_in_clust)<- c("Number of patients", "Assigned Cluster" )
+pie(Number_in_clust$`Number of patients`, labels = Number_in_clust$`Number of patients`)
+```
+
+## Number of Patients in each corresponding cluster
+
+```{r,echo =FALSE}
+Number_in_clust
+```
+
+
+## Heat map of aggregated means for variables within each cluster
+
+```{r,echo =FALSE,fig4,fig.width=6,fig.height=4,echo=FALSE,message=FALSE,include=TRUE}
+# heatmap(as.matrix(means_k[, 2:22]))
+# ggheatmap(as.matrix(means_k[, 2:22]))
+# d3heatmap(as.matrix(means_k[, 2:22]), scale = "column")
+mat<- (means_k[, 2:8])
+l = list(title = "",color_bar= "discrete")
+rownames(mat)<- paste("Cluster", means_k[,1], sep = " ")
+Heatmap(mat, cluster_rows = TRUE, row_names_side =  "left",   column_dend_reorder = TRUE, heatmap_legend_param = l)
+```
+
+
+## Boxplots for each cluster and corresponding clinical variables
+
+### HbA1c distribution among patients in the five identified clusters
+
+```{r}
+x<- ggplot(data = bl.data.for.pca_comp, aes(as.factor(fit.cluster),HbA1c))+geom_boxplot()+
+  xlab("Assigned Cluster") + ylab("HbA1c")
+  x
+```
+
+### GAD anitibdy distribution among patients in the assigned clusters
+
+```{r}
+y<- ggplot(data = bl.data.for.pca_comp, aes(as.factor(fit.cluster),GAD))+geom_boxplot()+
+ xlab("Assigned Cluster") + ylab("GAD")
+y
+```
+
+### BMI distribution among patients in the assigned clusters
+
+```{r}
+z<- ggplot(data = bl.data.for.pca_comp, aes(as.factor(fit.cluster),bBMI))+geom_boxplot()+
+xlab("Assigned Cluster") + ylab("BMI")
+z
+```
+
+### Insuline secretion (HOMA beta) among patients in the assigned clsters
+
+```{r}
+u<- ggplot(data = bl.data.for.pca_comp, aes(as.factor(fit.cluster),homa_b))+geom_boxplot()+
+xlab("Assigned Cluster") + ylab("HOMA beta")
+u
+```
+
+### Insulin resistance (HOMA IR) among patients in the assigned clsters
+
+```{r}
+v<- ggplot(data = bl.data.for.pca_comp, aes(as.factor(fit.cluster),homa_ir))+geom_boxplot()+
+xlab("Assigned Cluster") + ylab("HOMA IR")
+v
+
+```
+
+### Diabetes duration in the assigned clusters
+```{r}
+w<- ggplot(data = bl.data.for.pca_comp, aes(as.factor(fit.cluster),diabetesduration))+geom_boxplot()+
+xlab("Assigned Cluster") + ylab("Diabetes duration")
+w
+```
+
+### Age diagnosis in the assigned clusters 
+
+```{r}
+s<- ggplot(data = bl.data.for.pca_comp, aes(as.factor(fit.cluster),agedeb))+geom_boxplot()+
+xlab("Assigned Cluster") + ylab("Age diagnosis")
+s
+```
+________________________________________
+
+# Analyses of clinical outcomes depending on clustering
+_______________________________
+
+
+```{r, echo = FALSE}
+Clustered_patients<-(data.for.pca_met[data.for.pca_met$id %in% rownames(bl.data.for.pca_comp), ])
+Clustered_patients$id<-as.character(Clustered_patients$id)
+bl.data.for.pca_comp$id<-rownames(bl.data.for.pca_comp)
+Clustered_patients<-join(Clustered_patients, bl.data.for.pca_comp, by="id")
+
+
+```
+
+
+
+## Find the most important variables for each clusters
+
+
+## Test for within the cluster associations for most important varibales
+
+## Test for enrichment of treatment allocation 
+
+## Test for enrichment of diabetes complications for all clusters
